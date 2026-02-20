@@ -15,6 +15,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(ethercat_interface REQUIRED)
 find_package(yaml_cpp_vendor REQUIRED)
+find_package(std_srvs REQUIRED)
 
 # Find system yaml-cpp for proper linking
 find_package(PkgConfig REQUIRED)
@@ -39,6 +40,7 @@ ament_target_dependencies(
   rclcpp_lifecycle
   ethercat_interface
   yaml_cpp_vendor
+  std_srvs
 )
 
 # Explicitly link yaml-cpp
