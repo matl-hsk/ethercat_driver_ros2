@@ -28,6 +28,30 @@ EcCiA402Drive::~EcCiA402Drive() {}
 
 bool EcCiA402Drive::initialized() {return initialized_;}
 
+bool EcCiA402Drive::configure() {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  target_state_ = STATE_SWITCH_ON;
+  return configured_ && target_state_ = STATE_SWITCH_ON;
+}
+
+bool EcCiA402Drive::activate() {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  target_state_ = STATE_OPERATION_ENABLED;
+  return active_ && target_state_ = STATE_OPERATION_ENABLED;
+}
+
+bool EcCiA402Drive::quickstop(bool activate) {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  if (activate && active_ && target_state_ == STATE_OPERATION_ENABLED) {
+    target_state_ = STATE_QUICK_STOP_ACTIVE;
+  }
+  if (!activate && quickstop_active_ && target_state_ == STATE_QUICK_STOP_ACTIVE) {
+    target_state_ = STATE_OPERATION_ENABLED;
+  }
+  return (!activate && active_ && target_state_ = STATE_OPERATION_ENABLED) || 
+         (activate && quickstop_active_ && target_state_ = STATE_QUICK_STOP_ACTIVE);
+}
+
 void EcCiA402Drive::updateState()
 {
   if (status_word_ != last_status_word_) {
@@ -41,6 +65,11 @@ void EcCiA402Drive::updateState()
       );
     }
   }
+
+  configured_ = (state_ == STATE_SWITCH_ON) && (last_state_ == STATE_SWITCH_ON);
+  active_ = (state_ == STATE_OPERATION_ENABLED) && (last_state_ == STATE_OPERATION_ENABLED);
+  quickstop_active_ = (state_ == STATE_QUICK_STOP_ACTIVE) && (last_state_ == STATE_QUICK_STOP_ACTIVE);
+
   last_status_word_ = status_word_;
   last_state_ = state_;
   counter_++;
@@ -49,6 +78,7 @@ void EcCiA402Drive::updateState()
 
 void EcCiA402Drive::processData(size_t entry_idx, uint8_t * domain_address)
 {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
   auto index = domain_map_[entry_idx];
   ethercat_interface::EcPdoSingleInterfaceChannelManager * channel_ptr =
     static_cast<
@@ -71,11 +101,10 @@ void EcCiA402Drive::processData(size_t entry_idx, uint8_t * domain_address)
         }
       }
 
-      if (auto_state_transitions_) {
-        channel.default_value = transition(
-          state_,
-          channel.ec_read(domain_address));
-      }
+      channel.default_value = transition(
+        state_,
+        auto_state_transitions_ ? STATE_OPERATION_ENABLED : target_state_,
+        channel.ec_read(domain_address));
     }
   }
 
@@ -212,36 +241,88 @@ DeviceState EcCiA402Drive::deviceState(uint16_t status_word)
 }
 
 /** returns the control word that will take device from state to next desired state */
-uint16_t EcCiA402Drive::transition(DeviceState state, uint16_t control_word)
+uint16_t EcCiA402Drive::transition(DeviceState state, DeviceState target_state, uint16_t control_word)
 {
   switch (state) {
-    case STATE_START:                     // -> STATE_NOT_READY_TO_SWITCH_ON (automatic)
-      return control_word;
-    case STATE_NOT_READY_TO_SWITCH_ON:    // -> STATE_SWITCH_ON_DISABLED (automatic)
-      return control_word;
-    case STATE_SWITCH_ON_DISABLED:        // -> STATE_READY_TO_SWITCH_ON
-      return (control_word & 0b01111110) | 0b00000110;
-    case STATE_READY_TO_SWITCH_ON:        // -> STATE_SWITCH_ON
-      return (control_word & 0b01110111) | 0b00000111;
-    case STATE_SWITCH_ON:                 // -> STATE_OPERATION_ENABLED
-      return (control_word & 0b01111111) | 0b00001111;
-    case STATE_OPERATION_ENABLED:         // -> GOOD
-      return control_word;
-    case STATE_QUICK_STOP_ACTIVE:         // -> STATE_OPERATION_ENABLED
-      return (control_word & 0b01111111) | 0b00001111;
-    case STATE_FAULT_REACTION_ACTIVE:     // -> STATE_FAULT (automatic)
-      return control_word;
-    case STATE_FAULT:                     // -> STATE_SWITCH_ON_DISABLED
-      if (auto_fault_reset_ || fault_reset_) {
-        fault_reset_ = false;
-        return (control_word & 0b11111111) | 0b10000000;     // automatic reset
-      } else {
-        return control_word;
+
+    case STATE_SWITCH_ON_DISABLED:
+      switch (target_state) {
+        case STATE_READY_TO_SWITCH_ON:
+        case STATE_SWITCH_ON:
+        case STATE_OPERATION_ENABLED:
+          return (control_word & 0b1111111001110000) | 0b00000110;
+        case STATE_SWITCH_ON_DISABLED:
+        default:
+          return (control_word & 0b1111111001110000) | 0b00000100;
       }
-    default:
-      break;
+
+    case STATE_READY_TO_SWITCH_ON:
+      switch (target_state) {
+        case STATE_READY_TO_SWITCH_ON:
+          return (control_word & 0b1111111001110000) | 0b00000110;
+        case STATE_SWITCH_ON:
+        case STATE_OPERATION_ENABLED:
+          return (control_word & 0b1111111001110000) | 0b00000111;
+        case STATE_SWITCH_ON_DISABLED:
+        default:
+          return (control_word & 0b1111111001110000) | 0b00000100;  
+      }
+
+    case STATE_SWITCH_ON:
+      switch (target_state) {
+        case STATE_READY_TO_SWITCH_ON:
+          return (control_word & 0b1111111001110000) | 0b00000110;
+        case STATE_SWITCH_ON:
+          return (control_word & 0b1111111001110000) | 0b00000111;
+        case STATE_OPERATION_ENABLED:
+          return (control_word & 0b1111111001110000) | 0b00001111;
+        case STATE_SWITCH_ON_DISABLED:
+        default:
+          return (control_word & 0b1111111001110000) | 0b00000100;   
+      }
+
+    case STATE_OPERATION_ENABLED:
+      switch (target_state) {
+        case STATE_READY_TO_SWITCH_ON:
+          return (control_word & 0b1111111001110000) | 0b00000110;
+        case STATE_SWITCH_ON:
+          return (control_word & 0b1111111001110000) | 0b00000111;
+        case STATE_OPERATION_ENABLED:
+          return (control_word & 0b1111111001110000) | 0b00001111;
+        case STATE_QUICK_STOP_ACTIVE:
+          return (control_word & 0b1111111001110000) | 0b00001011;
+        case STATE_SWITCH_ON_DISABLED:
+        default:
+          return (control_word & 0b1111111001110000) | 0b00000100;         
+      }
+
+    case STATE_QUICK_STOP_ACTIVE:
+      switch (target_state) {
+        case STATE_OPERATION_ENABLED:
+          return (control_word & 0b1111111001110000) | 0b00001111;
+        case STATE_QUICK_STOP_ACTIVE:
+          return (control_word & 0b1111111001110000) | 0b00001011;
+        case STATE_READY_TO_SWITCH_ON:
+        case STATE_SWITCH_ON:
+        case STATE_SWITCH_ON_DISABLED:
+        default:
+          return (control_word & 0b1111111001110000) | 0b00000100;    
+      }
+
+    case STATE_FAULT:
+      switch (target_state) {
+        case STATE_SWITCH_ON_DISABLED:
+        case STATE_READY_TO_SWITCH_ON:
+        case STATE_SWITCH_ON:
+        case STATE_OPERATION_ENABLED:
+          return (control_word & 0b1111111001110000) | 0b10000100;
+        default:
+          return (control_word & 0b1111111001110000) | 0b00000100;
+      }
+
+    default: 
+      return (control_word & 0b1111111001110000) | 0b00000100;
   }
-  return control_word;
 }
 
 }  // namespace ethercat_generic_plugins

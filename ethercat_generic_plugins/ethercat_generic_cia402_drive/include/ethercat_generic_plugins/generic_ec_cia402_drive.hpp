@@ -21,6 +21,7 @@
 #include <string>
 #include <unordered_map>
 #include <limits>
+#include <mutex>
 
 #include "yaml-cpp/yaml.h"
 #include "ethercat_interface/ec_slave.hpp"
@@ -39,6 +40,9 @@ public:
   /** Returns true if drive has reached "operation enabled" state.
    *  The transition through the state machine is handled automatically. */
   bool initialized();
+  bool activate() override;
+  bool configure() override;
+  bool quickstop(bool activate) override;
 
   virtual void processData(size_t entry_idx, uint8_t * domain_address);
 
@@ -59,7 +63,13 @@ protected:
   uint16_t control_word_ = 0;
   DeviceState last_state_ = STATE_START;
   DeviceState state_ = STATE_START;
+  DeviceState target_state_ = STATE_SWITCH_ON_DISABLED;
+  std::mutex state_mutex_;
+  
   bool initialized_ = false;
+  bool configured_ = false;
+  bool active_ = false;
+  bool quickstop_active_ = false;
   bool auto_fault_reset_ = false;
   bool auto_state_transitions_ = true;
   bool fault_reset_ = false;
@@ -70,7 +80,7 @@ protected:
   /** returns device state based upon the status_word */
   DeviceState deviceState(uint16_t status_word);
   /** returns the control word that will take device from state to next desired state */
-  uint16_t transition(DeviceState state, uint16_t control_word);
+  uint16_t transition(DeviceState state, DeviceState target_state, uint16_t control_word);
   /** set up of the drive configuration from yaml node*/
   bool setup_from_config(YAML::Node drive_config);
   /** set up of the drive configuration from yaml file*/
