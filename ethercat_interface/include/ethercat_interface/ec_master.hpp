@@ -143,6 +143,8 @@ public:
   /** call after adding all slaves, and before update */
   bool activate();
 
+  void deactivate();
+
   /** perform one EtherCAT cycle, passing the domain to the slaves */
   virtual void update(uint32_t domain = 0);
 

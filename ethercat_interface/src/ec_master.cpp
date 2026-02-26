@@ -275,6 +275,8 @@ bool EcMaster::activate()
   return true;
 }
 
+void EcMaster::deactivate() {ecrt_release_master(master_);}
+
 void EcMaster::update(uint32_t domain)
 {
   // receive process data
@@ -301,9 +303,11 @@ void EcMaster::update(uint32_t domain)
   }
 
   // read and write process data
-  for (DomainInfo::Entry & entry : domain_info->entries) {
-    for (int i = 0; i < entry.num_pdos; ++i) {
-      (entry.slave)->processData(i, domain_info->domain_pd + entry.offset[i]);
+  if (domain_info->domain_state.wc_state == EC_WC_COMPLETE) {
+    for (DomainInfo::Entry & entry : domain_info->entries) {
+      for (int i = 0; i < entry.num_pdos; ++i) {
+        (entry.slave)->processData(i, domain_info->domain_pd + entry.offset[i]);
+      }
     }
   }
 
@@ -347,12 +351,13 @@ void EcMaster::readData(uint32_t domain)
   }
 
   // read and write process data
-  for (DomainInfo::Entry & entry : domain_info->entries) {
-    for (int i = 0; i < entry.num_pdos; ++i) {
-      (entry.slave)->processData(i, domain_info->domain_pd + entry.offset[i]);
+  if (domain_info->domain_state.wc_state == EC_WC_COMPLETE) {
+    for (DomainInfo::Entry & entry : domain_info->entries) {
+      for (int i = 0; i < entry.num_pdos; ++i) {
+        (entry.slave)->processData(i, domain_info->domain_pd + entry.offset[i]);
+      }
     }
   }
-
   ++update_counter_;
 }
 
@@ -364,9 +369,11 @@ void EcMaster::writeData(uint32_t domain)
   }
 
   // read and write process data
-  for (DomainInfo::Entry & entry : domain_info->entries) {
-    for (int i = 0; i < entry.num_pdos; ++i) {
-      (entry.slave)->processData(i, domain_info->domain_pd + entry.offset[i]);
+  if (domain_info->domain_state.wc_state == EC_WC_COMPLETE) {
+    for (DomainInfo::Entry & entry : domain_info->entries) {
+      for (int i = 0; i < entry.num_pdos; ++i) {
+        (entry.slave)->processData(i, domain_info->domain_pd + entry.offset[i]);
+      }
     }
   }
 
