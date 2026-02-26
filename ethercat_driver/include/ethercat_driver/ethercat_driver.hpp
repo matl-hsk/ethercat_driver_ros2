@@ -31,6 +31,7 @@
 #include "ethercat_interface/ec_slave.hpp"
 #include "ethercat_interface/ec_master.hpp"
 #include "yaml-cpp/yaml.h"
+#include "std_srvs/srv/set_bool.hpp"
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -60,6 +61,9 @@ public:
 
   ETHERCAT_DRIVER_PUBLIC
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
+
+  ETHERCAT_DRIVER_PUBLIC
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & previous_state) override;
 
   ETHERCAT_DRIVER_PUBLIC
   hardware_interface::return_type read(const rclcpp::Time &, const rclcpp::Duration &) override;
@@ -137,6 +141,18 @@ protected:
 
   /** Empty interfaces */
   std::vector<double> empty_interface_;
+
+  std::unique_ptr<realtime_tools::AsyncFunctionHandler<hardware_interface::return_type>> configuration_handler_;
+
+  std::mutex collective_state_mutex_;
+  std::condition_variable collective_state_cv_;
+  std::mutex quickstop_mutex_;
+  std::condition_variable quickstop_cv_;
+  bool initialize_ = true;
+  bool configure_ = false;
+  bool activate_ = false;
+
+  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr quickstop_service_;
 };
 }  // namespace ethercat_driver
 
