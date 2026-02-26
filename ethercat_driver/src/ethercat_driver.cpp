@@ -368,6 +368,20 @@ CallbackReturn EthercatDriver::on_init(
       "Transfer configuration loaded successfully!");
   }
 
+  // Get control frequency
+  if (info_.hardware_parameters.find("control_frequency") == info_.hardware_parameters.end()) {
+    // Control frequency was not provided, default to 100 Hz
+    control_frequency_ = 100.0;
+  } else {
+    try {
+      control_frequency_ = std::stod(info_.hardware_parameters["control_frequency"]);
+    } catch (std::exception & e) {
+      RCLCPP_FATAL(
+        rclcpp::get_logger("EthercatDriver"), "Invalid control frequency (%s)!", e.what());
+      return CallbackReturn::ERROR;
+    }
+  }
+
   realtime_tools::AsyncFunctionHandlerParams async_thread_params;
   async_thread_params.scheduling_policy = realtime_tools::AsyncSchedulingPolicy::DETACHED;
   async_thread_params.clock = get_clock();
@@ -558,20 +572,6 @@ CallbackReturn EthercatDriver::setupMaster()
 
 CallbackReturn EthercatDriver::configNetwork()
 {
-  // Get control frequency
-  if (info_.hardware_parameters.find("control_frequency") == info_.hardware_parameters.end()) {
-    // Control frequency was not provided, default to 100 Hz
-    control_frequency_ = 100.0;
-  } else {
-    try {
-      control_frequency_ = std::stod(info_.hardware_parameters["control_frequency"]);
-    } catch (std::exception & e) {
-      RCLCPP_FATAL(
-        rclcpp::get_logger("EthercatDriver"), "Invalid control frequency (%s)!", e.what());
-      return CallbackReturn::ERROR;
-    }
-  }
-
   // start EC and wait until state operative
 
   master_->setCtrlFrequency(control_frequency_);
