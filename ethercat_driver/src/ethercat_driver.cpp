@@ -638,8 +638,8 @@ CallbackReturn EthercatDriver::on_cleanup(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   configuration_handler_->stop_thread();
-  master_.stop();
-  master_.deactivate();
+  master_->stop();
+  master_->deactivate();
 
   RCLCPP_INFO(
     rclcpp::get_logger("EthercatDriver"), "System successfully stopped!");

@@ -31,13 +31,13 @@ bool EcCiA402Drive::initialized() {return initialized_;}
 bool EcCiA402Drive::configure() {
   const std::lock_guard<std::mutex> lock(state_mutex_);
   target_state_ = STATE_SWITCH_ON;
-  return configured_ && target_state_ = STATE_SWITCH_ON;
+  return configured_ && target_state_ == STATE_SWITCH_ON;
 }
 
 bool EcCiA402Drive::activate() {
   const std::lock_guard<std::mutex> lock(state_mutex_);
   target_state_ = STATE_OPERATION_ENABLED;
-  return active_ && target_state_ = STATE_OPERATION_ENABLED;
+  return active_ && target_state_ == STATE_OPERATION_ENABLED;
 }
 
 bool EcCiA402Drive::quickstop(bool activate) {
@@ -48,8 +48,8 @@ bool EcCiA402Drive::quickstop(bool activate) {
   if (!activate && quickstop_active_ && target_state_ == STATE_QUICK_STOP_ACTIVE) {
     target_state_ = STATE_OPERATION_ENABLED;
   }
-  return (!activate && active_ && target_state_ = STATE_OPERATION_ENABLED) || 
-         (activate && quickstop_active_ && target_state_ = STATE_QUICK_STOP_ACTIVE);
+  return (!activate && active_ && target_state_ == STATE_OPERATION_ENABLED) || 
+         (activate && quickstop_active_ && target_state_ == STATE_QUICK_STOP_ACTIVE);
 }
 
 void EcCiA402Drive::updateState()
