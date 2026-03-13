@@ -312,10 +312,10 @@ uint16_t EcCiA402Drive::transition(DeviceState state, DeviceState target_state, 
     case STATE_FAULT:
       switch (target_state) {
         case STATE_SWITCH_ON_DISABLED:
+          return (control_word & 0b1111111001110000) | 0b10000100;
         case STATE_READY_TO_SWITCH_ON:
         case STATE_SWITCH_ON:
         case STATE_OPERATION_ENABLED:
-          return (control_word & 0b1111111001110000) | 0b10000100;
         default:
           return (control_word & 0b1111111001110000) | 0b00000100;
       }
